@@ -52,8 +52,8 @@ end
     on both axes.
 ]]
 function Ball:reset()
-    self.x = VIRTUAL_WIDTH / 2 - 2
-    self.y = VIRTUAL_HEIGHT / 2 - 2
+    self.x = VIRTUAL_WIDTH / 2 - self.width / 2
+    self.y = VIRTUAL_HEIGHT / 2 - self.width / 2
     self.dy = math.random(2) == 1 and -100 or 100
     self.dx = math.random(-50, 50)
 end
@@ -67,5 +67,7 @@ function Ball:update(dt)
 end
 
 function Ball:render()
-    love.graphics.rectangle('fill', self.x, self.y, self.width, self.height)
+    love.graphics.rectangle('fill', self.x, self.y, self.width / 3, self.height)
+    love.graphics.rectangle('fill', self.x + self.width / 3, self.y + self.height / 3, self.width / 3, self.height / 3)
+    love.graphics.rectangle('fill', self.x + self.width * 2 / 3, self.y, self.width / 3, self.height)
 end

@@ -50,6 +50,11 @@ VIRTUAL_HEIGHT = 243
 
 -- speed at which we will move our paddle; multiplied by dt in update
 PADDLE_SPEED = 200
+BARRIER_SPEED = 200
+
+-- set whether either player is automated
+automatePlayer1 = false
+automatePlayer2 = true
 
 --[[
     Runs when the game first starts up, only once; used to initialize the game.
@@ -68,6 +73,7 @@ function love.load()
     math.randomseed(os.time())
 
     -- initialize our nice-looking retro text fonts
+    automationFont = love.graphics.newFont('font.ttf', 6)
     smallFont = love.graphics.newFont('font.ttf', 8)
     largeFont = love.graphics.newFont('font.ttf', 16)
     scoreFont = love.graphics.newFont('font.ttf', 32)
@@ -78,7 +84,8 @@ function love.load()
     sounds = {
         ['paddle_hit'] = love.audio.newSource('sounds/paddle_hit.wav', 'static'),
         ['score'] = love.audio.newSource('sounds/score.wav', 'static'),
-        ['wall_hit'] = love.audio.newSource('sounds/wall_hit.wav', 'static')
+        ['wall_hit'] = love.audio.newSource('sounds/wall_hit.wav', 'static'),
+        ['barrier_hit'] = love.audio.newSource('sounds/barrier_hit.wav', 'static')
     }
 
     -- initialize window with virtual resolution
@@ -97,10 +104,14 @@ function love.load()
     -- following turn
     servingPlayer = 1
 
-    -- initialize player paddles and ball
+    -- initialize player paddles, barrier, and ball
     player1 = Paddle(10, 30, 5, 20)
     player2 = Paddle(VIRTUAL_WIDTH - 10, VIRTUAL_HEIGHT - 30, 5, 20)
-    ball = Ball(VIRTUAL_WIDTH / 2 - 2, VIRTUAL_HEIGHT / 2 - 2, 4, 4)
+    barrier = Paddle(VIRTUAL_WIDTH / 2 - 2.5, 30, 5, 40)
+    ball = Ball(VIRTUAL_WIDTH / 2 - 2, VIRTUAL_HEIGHT / 2 - 2, 9, 9)
+
+    -- set the barrier.dy
+    barrier.dy = BARRIER_SPEED
 
     gameState = 'start'
 end
@@ -127,6 +138,7 @@ function love.update(dt)
         else
             ball.dx = -math.random(140, 200)
         end
+        barrier.y = 30
     elseif gameState == 'play' then
         -- detect ball collision with paddles, reversing dx if true and
         -- slightly increasing it, then altering the dy based on the position of collision
@@ -145,7 +157,7 @@ function love.update(dt)
         end
         if ball:collides(player2) then
             ball.dx = -ball.dx * 1.03
-            ball.x = player2.x - 4
+            ball.x = player2.x - ball.width
 
             -- keep velocity going in the same direction, but randomize it
             if ball.dy < 0 then
@@ -156,6 +168,27 @@ function love.update(dt)
 
             sounds['paddle_hit']:play()
         end
+        -- detect if ball hits barrier
+        if ball:collides(barrier) then
+            if ball.dx < 0 then
+                -- ball is moving right to left
+                ball.x = barrier.x + barrier.width 
+            else
+                -- ball is moving left to right
+                ball.x = barrier.x - ball.width
+            end
+
+            ball.dx = -ball.dx * 1.03
+
+            -- randomize ball.dy to make it more difficult
+            if ball.dy < 0 then
+                ball.dy = -math.random(10,150)
+            else
+                ball.dy = math.random(10,150)
+            end
+
+            sounds['barrier_hit']:play()
+        end
 
         -- detect upper and lower screen boundary collision and reverse if collided
         if ball.y <= 0 then
@@ -164,13 +197,25 @@ function love.update(dt)
             sounds['wall_hit']:play()
         end
 
-        -- -4 to account for the ball's size
-        if ball.y >= VIRTUAL_HEIGHT - 4 then
-            ball.y = VIRTUAL_HEIGHT - 4
+        -- -ball.height to account for the ball's size
+        if ball.y >= VIRTUAL_HEIGHT - ball.height then
+            ball.y = VIRTUAL_HEIGHT - ball.height
             ball.dy = -ball.dy
             sounds['wall_hit']:play()
         end
         
+        -- Move the barrier
+        barrier.y = barrier.y + barrier.dy * dt
+
+        -- barrier boundary hit
+        if barrier.y >= VIRTUAL_HEIGHT - barrier.height then
+            barrier.y = VIRTUAL_HEIGHT - barrier.height
+            barrier.dy = -barrier.dy
+        elseif barrier.y < 0 then
+            barrier.y = 0
+            barrier.dy = -barrier.dy
+        end
+
         -- if we reach the left or right edge of the screen, 
         -- go back to start and update the score
         if ball.x < 0 then
@@ -186,6 +231,7 @@ function love.update(dt)
             else
                 gameState = 'serve'
                 -- places the ball in the middle of the screen, no velocity
+                barrier.y = 30
                 ball:reset()
             end
         end
@@ -206,27 +252,54 @@ function love.update(dt)
     end
 
     -- player 1 movement
-    if love.keyboard.isDown('w') then
-        player1.dy = -PADDLE_SPEED
-    elseif love.keyboard.isDown('s') then
-        player1.dy = PADDLE_SPEED
+    if automatePlayer1 then
+        if ball.y > player1.y + player1.height * 2 / 3 then
+            -- ball is below the automated paddle so move lower
+            player1.dy = PADDLE_SPEED
+        elseif ball.y < player1.y + player1.height / 3 then
+            -- ball is higher the automated paddle so move higher
+            player1.dy = -PADDLE_SPEED
+        else
+            -- we're in alignment so don't move
+            player1.dy = 0
+        end
     else
-        player1.dy = 0
+        if love.keyboard.isDown('w') then
+            player1.dy = -PADDLE_SPEED
+        elseif love.keyboard.isDown('s') then
+            player1.dy = PADDLE_SPEED
+        else
+            player1.dy = 0
+        end
     end
 
     -- player 2 movement
-    if love.keyboard.isDown('up') then
-        player2.dy = -PADDLE_SPEED
-    elseif love.keyboard.isDown('down') then
-        player2.dy = PADDLE_SPEED
+    if automatePlayer2 then
+        if ball.y > player2.y + player2.height * 2 / 3 then
+            -- ball is below the automated paddle so move lower
+            player2.dy = PADDLE_SPEED
+        elseif ball.y < player2.y + player2.height / 3 then
+            -- ball is higher the automated paddle so move higher
+            player2.dy = -PADDLE_SPEED
+        else
+            -- we're in alignment so don't move
+            player2.dy = 0
+        end
     else
-        player2.dy = 0
+        if love.keyboard.isDown('up') then
+            player2.dy = -PADDLE_SPEED
+        elseif love.keyboard.isDown('down') then
+            player2.dy = PADDLE_SPEED
+        else
+            player2.dy = 0
+        end
     end
-
+    
     -- update our ball based on its DX and DY only if we're in play state;
     -- scale the velocity by dt so movement is framerate-independent
     if gameState == 'play' then
         ball:update(dt)
+        barrier:update(dt)
     end
 
     player1:update(dt)
@@ -267,6 +340,23 @@ function love.keypressed(key)
             end
         end
     end
+
+    -- toggle automation
+    if key == '1' then
+        if automatePlayer1 == true then
+            automatePlayer1 = false
+        else 
+            automatePlayer1 = true
+        end
+    end
+    if key == '2' then
+        if automatePlayer2 == true then
+            automatePlayer2 = false
+        else
+            automatePlayer2 = true
+        end
+    end
+
 end
 
 --[[
@@ -279,7 +369,7 @@ function love.draw()
 
     -- clear the screen with a specific color; in this case, a color similar
     -- to some versions of the original Pong
-    love.graphics.clear(40, 45, 52, 255)
+    love.graphics.clear(40/255, 45/255, 52/255, 1)
 
     love.graphics.setFont(smallFont)
 
@@ -307,9 +397,13 @@ function love.draw()
 
     player1:render()
     player2:render()
+    love.graphics.setColor(180/255,180/255,180/255)
+    barrier:render()
+    love.graphics.setColor(1,1,1)
     ball:render()
 
     displayFPS()
+    displayAutomation()
 
     push:apply('end')
 end
@@ -322,6 +416,23 @@ function displayFPS()
     love.graphics.setFont(smallFont)
     love.graphics.setColor(0, 255, 0, 255)
     love.graphics.print('FPS: ' .. tostring(love.timer.getFPS()), 10, 10)
+end
+
+function displayAutomation()
+    -- simple display on how the automated paddles are toggled
+    love.graphics.setFont(automationFont)
+    love.graphics.setColor(255, 0, 255, 255)
+    if automatePlayer1 then
+        love.graphics.printf('Player 1: Automated (press 1 to toggle)', 20, VIRTUAL_HEIGHT - 10, VIRTUAL_WIDTH, 'left')
+    else 
+        love.graphics.printf('Player 1: Manual Control (press 1 to toggle)', 20, VIRTUAL_HEIGHT - 10, VIRTUAL_WIDTH, 'left')
+    end
+
+    if automatePlayer2 then
+        love.graphics.printf('Player 2: Automated (press 2 to toggle)', 0, VIRTUAL_HEIGHT - 10, VIRTUAL_WIDTH - 20, 'right')
+    else 
+        love.graphics.printf('Player 2: Manual Control (press 2 to toggle)', 0, VIRTUAL_HEIGHT - 10, VIRTUAL_WIDTH - 20, 'right')
+    end
 end
 
 --[[
